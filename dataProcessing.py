@@ -32,7 +32,9 @@ if(os.path.isfile(filename)):
 # 0	  1   2   3   4   5   6   7   8
 # 17  16  15  14  13  12  11  10  9
 # 18  19  20  21  22  23  24  25  26
-# ...
+# 35  34  33  32  31  30  29  28  27
+# 36  37  38  39  40  41  42  43  44
+# .. 
 # 72  73  74  75  76  77  78  79  80 
 
 ########################################
@@ -79,39 +81,70 @@ for k in range(0,81):
 
 
 ########################################
-# Arrange the waveforms appropriately
+# Arrange the waveforms appropriately -- possibly not necessary
 ########################################
 
-direct = np.sqrt(0.118**2+0.014**2+0.007**2)
-reference = voltage_raw[0,:].index(max(voltage_raw[0,:]))
+########################################
+# Find reference point for each transmitter
+########################################
+
+# Coordinates of transmitters relative to transmitter 0 -- 3x3 grid
+[xtx,ytx] = np.meshgrid([0.,0.02,0.04],[0.,-0.02,-0.04])
+# distance between transmitter 0 and receiver
+directDistance = np.sqrt((0.118+xtx)**2+(0.014+ytx)**2+0.007**2)
+# index of the max voltage - i.e. when the transmitted signal directly impacts the reciever
+referenceVoltageIndexAll = voltage_raw[:,0]*0
+for i in range(0,len(voltage_raw[:,0])):
+	referenceVoltageIndexAll[i] = np.where(voltage_raw[i,:] == max(voltage_raw[i,:]))[0]
+
+# Reduce to 3x3 -- turn this into a function so as to not do it manually every time
+referenceVoltageIndex = np.matrix([[referenceVoltageIndexAll[0],referenceVoltageIndexAll[4],referenceVoltageIndexAll[8]],
+					[referenceVoltageIndexAll[36],referenceVoltageIndexAll[40],referenceVoltageIndexAll[44]],
+					[referenceVoltageIndexAll[72],referenceVoltageIndexAll[76],referenceVoltageIndexAll[80]]])
+
+
+
+
+# Window we are trying to analyze 
+# TODO: modify Z to analyze entire 3D window
+# X = np.arange(-0.05:0.002:0.15)
+# Y = np.arange(-0.15:0.002:0.15)
+# Z = 0.243
+
+# Create matrices that hold the x and y displacement for each coordinate in image
+# Xi,Yi = meshgrid(X,Y)
+
+# Distance from 0,0,0 coordinate to current coordinate
+# Note: X=0 and Y=0 are the same for the transmitter and the window
+# r1 = np.sqrt(Xi**2 + Yi**2 + (Z-0.106)**2)
+# # Distance from each coordinate to the receiver
+# r2 = sqrt((Xi-0.118)**2 + (Yi+0.014)**2 + (Z-0.099)**2)
+
+
 
 # discretizations
 dis_step = 5e-3
 dis_time = time[1]-time[0]
 speed = 3e8
 
-X = np.arange(-0.05:0.002:0.15)
-Y = np.arange(-0.15:0.002:0.15)
-Z = 0.243
 
-image = zeros((len(X),len(Y)))
+
+# blank matrix for the image
+# image = zeros((len(X),len(Y)))
 
 #### test using only 9 coordinates
-dis_diff = zeros((3,3))
-delay_diff = zeros((3,3))
+dis_diff = np.zeros((3,3))
+delay_diff = np.zeros((3,3))
 
-Xi,Yi = meshgrid(X,Y)
 
-r1 = np.sqrt(Xi**2 + Yi**2 + (Z-0.106)**2)
-r2 = sqrt((Xi-0.118)**2 + (Yi+0.014)**2 + (Z-0.099)**2)
 
-index = reference + round((r1+r2-direct)/speed/dis_time)-start+1
+# index = reference + round((r1+r2-direct)/speed/dis_time)-start+1
 
 ########################################
 # Test plot
 ########################################
 
 plt.figure(2)
-plt.plot(voltageExpansion[0,:])
+plt.plot(voltage[0,:])
 plt.title('Interpolated')
 plt.show()
