@@ -1,0 +1,211 @@
+clear;
+
+load data_Apr24_1obj; 
+
+%% Process the data
+voltage1 = voltage;
+
+% center voltage from each point to the mean at that point 
+for k = 1:1:81
+    m = mean(voltage(k,:));
+    voltage1(k,:) = voltage(k,:) - m;
+end
+% figure(1);
+% plot(voltage1(2,:));
+% subtract the average signal from the raw signal
+voltage_ref_1 = voltage_raw(1,:) - mean(voltage_raw(1,:));
+
+tic
+
+% Add Gaussian filter
+% Generate a gaussian filter
+fil = fspecial('gaussian',[1 10],32);
+% Apply that filter twice to raw data
+voltage1_filter1 = imfilter(voltage1,fil);
+voltage1_filter1 = imfilter(voltage1_filter1,fil);
+% Apply that filter to the processed voltages
+voltage_raw_1 = imfilter(voltage_ref_1,fil);
+voltage_raw_1 = imfilter(voltage_raw_1,fil);
+
+disp('Time to run Gaussian filter');
+toc
+
+% Interpolate
+tic
+
+% Interpolate the time to 1/2, 1/4, 1/8
+time_intp = interp1(1:4096,time,1:0.5:4096);
+time_intp2 = interp1(1:0.5:4096,time_intp,1:0.25:4096);
+time_intp3 = interp1(1:0.25:4096,time_intp2,1:0.125:4096);
+
+% initialize arrays for interpolation
+voltage1_fil_intp = zeros(81,length(1:0.5:4096));
+voltage1_fil_intp2 = zeros(81,length(1:0.25:4096));
+voltage1_fil_intp3 = zeros(81,length(1:0.125:4096));
+
+% for each transmitter position
+for k = 1:1:81
+    % interpolate 1/2
+    voltage1_fil_intp(k,:) = interp1(1:4096,voltage1_filter1(k,:),1:0.5:4096,'spline');
+    % interpolate 1/4
+    voltage1_fil_intp2(k,:) = interp1(1:0.5:4096,voltage1_fil_intp(k,:),1:0.25:4096,'spline');
+    % interpolate 1/8
+    voltage1_fil_intp3(k,:) = interp1(1:0.25:4096,voltage1_fil_intp2(k,:),1:0.125:4096,'spline');
+end
+
+% interpolate the raw data to 1/8
+voltage_raw_1 = interp1(1:4096,voltage_raw_1,1:0.5:4096,'spline');
+voltage_raw_1 = interp1(1:0.5:4096,voltage_raw_1,1:0.25:4096,'spline');
+voltage_raw_1 = interp1(1:0.25:4096,voltage_raw_1,1:0.125:4096,'spline');
+
+disp('Time to interpolate');
+toc
+
+% Set the reference point of direct-coupling
+% 0.118: x distance between transmitter and receiver?
+% 0.014: y distance between transmitter and receiver?
+% 0.007: z distance?
+
+direct = sqrt(0.118^2+0.014^2+0.007^2);
+% find the max index of raw voltage
+ref = find(voltage_raw_1 == max(voltage_raw_1));
+
+% Check the waveform including reflections
+% why is start 5700??
+start = 5700;
+voltage_cut = voltage1_fil_intp3(1:81,start:32761);
+
+% Normalization
+top = max(max(voltage_cut));
+for k = 1:1:81
+    voltage_cut(k,:) = voltage_cut(k,:)*top/max(voltage_cut(k,:));
+end
+
+
+%% Arrange the waveforms in the matrix of 9x9
+
+tic
+
+voltage2d = zeros(9,9,length(1:32761)+4000);
+
+for k=1:9
+    voltage2d(k,1,:)=[zeros(1,start-1) voltage_cut(k,:) zeros(1,4000)];
+end;
+
+for k=10:18
+    voltage2d(19-k,2,:)=[zeros(1,start-1) voltage_cut(k,:) zeros(1,4000)];
+end;
+
+for k=19:27
+    voltage2d(k-18,3,:)=[zeros(1,start-1) voltage_cut(k,:) zeros(1,4000)];
+end;
+
+for k=28:36
+    voltage2d(37-k,4,:)=[zeros(1,start-1) voltage_cut(k,:) zeros(1,4000)];
+end;
+
+for k=37:45
+    voltage2d(k-36,5,:)=[zeros(1,start-1) voltage_cut(k,:) zeros(1,4000)];
+end;
+
+for k=46:54
+    voltage2d(55-k,6,:)=[zeros(1,start-1) voltage_cut(k,:) zeros(1,4000)];
+end;
+
+for k=55:63
+    voltage2d(k-54,7,:)=[zeros(1,start-1) voltage_cut(k,:) zeros(1,4000)];
+end;
+
+for k=64:72
+    voltage2d(73-k,8,:)=[zeros(1,start-1) voltage_cut(k,:) zeros(1,4000)];
+end;
+
+for k=73:81
+    voltage2d(k-72,9,:)=[zeros(1,start-1) voltage_cut(k,:) zeros(1,4000)];
+end;
+
+disp('Time to arrange the waveform');
+toc
+
+%% Map the 2D surface for scanning
+X = -0.05:0.002:0.15;
+Y = -0.15:0.002:0.15;
+Z = 0.243; % actual Z
+
+global dis_step;
+global dis_time;
+global c1;
+dis_step=5e-3;
+dis_time=time_intp3(2)-time_intp3(1);
+c1=3e8;
+
+voltage_image = zeros(length(Y),length(X));
+voltage_image2 = zeros(length(Y),length(X));
+Dis_diff = zeros(9,9);
+Delay_diff = zeros(9,9);
+
+tic
+[Xi,Yi] = meshgrid(X,Y);
+% Distance from origin to each point in the grid
+r1 = sqrt(Xi.^2+Yi.^2+(Z-0.106)^2);
+% Distance from each point in the grid to the receiver
+r2 = sqrt((Xi-0.118).^2+(Yi+0.014).^2+(Z-0.099)^2);
+% index = location of max + number of discrete time units between receipt
+% of original signal and reflection - 5700 + 1
+index = ref + round((r1+r2-direct)/c1/dis_time)-start+1;
+[dx,dy] = meshgrid(0:0.005:0.04,0:-0.005:-0.04);
+
+disp('Meshgrid math');
+toc
+
+voltage_sum = zeros(1,1,length(start:32761));
+time1 = zeros(1,length(X)*length(Y));
+time2 = zeros(1,length(X)*length(Y));
+for lx=1:length(X)
+    for ly=1:length(Y)
+        tic
+        voltage_sum = voltage_sum * 0;
+        % r1 is the distance from TX1 to location (X,Y,Z);
+        % r2 is the distance from location (X,Y,Z) to the antenna
+        % (0.118,-0.01,-0.007) relative to TX1
+        Dis_diff = r1(ly,lx)-sqrt((X(lx)-dx).^2+(Y(ly)-dy).^2+(Z-0.106)^2);
+        Delay_diff = Dis_diff/c1;
+        delay = round(Delay_diff/dis_time);
+        time1(lx+ly-1) = toc;
+        tic
+        % for every transmitter location
+        for kx=1:9
+            for ky=1:9
+                % sum up contributions from when the reflected signal
+                % should arrive at the receiever
+                voltage_sum=voltage_sum+voltage2d(kx,ky,start-delay(ky,kx):32761-delay(ky,kx));
+            end
+        end
+        % half_wavelength corresponds to round 140 points 
+        voltage_image(ly,lx)=sum(abs(voltage_sum(1,1,index(ly,lx)-80:index(ly,lx)+80)));
+        voltage_image2(ly,lx)=mean(abs(voltage_sum(1,1,index(ly,lx)-80:index(ly,lx)+80)));
+        time2(lx+ly-1) = toc;
+    end
+    disp('Row completed');
+end
+
+disp('Average time1');
+mean(time1)
+
+disp('Average time2');
+mean(time2)
+
+figure(4);
+mesh(X*100,Y*100,(voltage_image));
+xlabel('X(m)');
+ylabel('Y(m)');
+view(2);
+figure(5);
+mesh(X*100,Y*100,(voltage_image2));
+xlabel('X(m)');
+ylabel('Y(m)');
+view(2);
+
+
+
+    
