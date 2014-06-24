@@ -122,14 +122,14 @@ referenceVoltageIndex = referenceVoltageIndexAll[indicesTX]
 # Coordinates of transmitters relative to transmitter 0 -- 3x3 grid
 txInRow = len(indicesTX)
 [xtx,ytx] = np.arange(0.,0.04,0.04/(txInRow-1)),np.arange(0.,-0.04,-0.04/(txInRow-1))
-xtx = xtx + 0.118
-ytx = ytx + 0.014
+xtx = xtx 
+ytx = ytx 
 
 
 
 # Window we are trying to analyze 
 # TODO: modify Z to analyze entire 3D window
-X = np.arange(-0.05,0.15,0.002)
+X = np.arange(-0.10,0.15,0.002)
 Y = np.arange(-0.15,0.15,0.002)
 Z = 0.243
 
@@ -160,26 +160,36 @@ direct = np.empty([len(xtx),len(ytx)])
 # Loop over each tx position
 for i in range(0,len(xtx)):
 	for j in range(0,len(ytx)):
-		direct[i,j] = np.sqrt((0.118 + xtx[i])**2 + (0.014 + ytx[j])**2 + 0.007**2)
+		direct[i,j] = np.sqrt((0.118 - xtx[i])**2 + (0.014 + ytx[j])**2 + 0.007**2)
 print('Distances calculated')
 
-# discretizations
+# discretizationsz
 dis_step = 5e-3
 dis_time = time[1]-time[0]
 speed = 3e8
 
+windowSize = 20
+
 amplitude_sum = np.empty([len(Y),len(X)])
+tempAmplitude = np.zeros(windowSize*2)
 # For each position in the window, sum up waveforms from each tx position over a small window
 for k in range(0,len(X)):
 	for l in range(0,len(Y)):
-		amplitude_sum[l,k] = 0.;
+		# amplitude_sum[l,k] = 0.
+		tempAmplitude = tempAmplitude * 0.
 		for i in range(0,len(xtx)):
 			for j in range(0,len(ytx)):
 				# Find the difference in distances for this tx pos
 				diff_cont = (distancesTX[k,l,i,j] + distancesRX[i,j] - direct[i,j])/speed
 				# diff_disc = round(diff_cont/dis_time)
 				time_of_signal = int(round(referenceVoltageIndex[i,j] + diff_cont/dis_time))
-				amplitude_sum[l,k] += sum(voltage[indicesTX[i,j],range(time_of_signal-10,time_of_signal+10)])#range(time_of_signal-100,time_of_signal+100)])
+				if(time_of_signal < windowSize):
+					tempAmplitude += [np.zeros(windowSize-time_of_signal), voltage[indicesTX[i,j],range(0,time_of_signal+windowSize)]]#range(time_of_signal-100,time_of_signal+100)])
+				elif (time_of_signal > timeLength-windowSize):
+					tempAmplitude += [voltage[indicesTX[i,j],range(time_of_signal-windowSize,timeLength+1)], np.zeros(windowSize+time_of_signal-timeLength)]
+				else:
+					tempAmplitude += voltage[indicesTX[i,j],range(time_of_signal-windowSize,time_of_signal+windowSize)]
+		amplitude_sum[l,k] = abs(sum(tempAmplitude))
 	print('Row Completed')
 
 
@@ -189,8 +199,9 @@ for k in range(0,len(X)):
 # Test plot
 ########################################
 fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-surf = ax.plot_surface(Xi,Yi,amplitude_sum,rstride=1, cstride=1, cmap=cm.coolwarm)
+plt.pcolormesh(Xi,Yi,amplitude_sum)
+# ax = fig.add_subplot(111, projection='3d')
+# surf = ax.plot_surface(Xi,Yi,amplitude_sum,rstride=1, cstride=1, cmap=cm.coolwarm)
 # plt.plot(X,Y,distancesRX)
 # plt.title('Distance to receiver')
 plt.show()

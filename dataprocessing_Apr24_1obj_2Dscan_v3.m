@@ -130,7 +130,7 @@ toc
 %% Map the 2D surface for scanning
 X = -0.05:0.002:0.15;
 Y = -0.15:0.002:0.15;
-Z = 0.243; % actual Z
+Z = 0.2; % actual Z
 
 global dis_step;
 global dis_time;
@@ -146,7 +146,7 @@ Delay_diff = zeros(9,9);
 
 tic
 [Xi,Yi] = meshgrid(X,Y);
-% Distance from origin to each point in the grid
+% Distance from TX to each point in the grid
 r1 = sqrt(Xi.^2+Yi.^2+(Z-0.106)^2);
 % Distance from each point in the grid to the receiver
 r2 = sqrt((Xi-0.118).^2+(Yi+0.014).^2+(Z-0.099)^2);
